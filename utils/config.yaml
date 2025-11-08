@@ -1,20 +1,19 @@
 # ================================
-# CONFIGURACIÓN GENERAL DEL PROYECTO
+# CONFIGURACIÓN GENERAL DEL PROYECTO (VALIDADA)
 # ================================
 
-# Símbolo principal a descargar desde MetaTrader 5.
+# Símbolo principal para MT5 y reportes
 simbolo: "EURUSD"
-
-# (Opcional) Símbolo exógeno (p.ej., US500/SPX/SPY) si lo habilitas en bt.exog.enable
+# Símbolo adicional (opcional) para comparativos o exógenas
 simbolo_spy: "US500"
 
-# Timeframe para la descarga desde MT5 (válidos: M1/M5/M15/M30/H1/H4/D1/W1/MN1)
+# Timeframe nativo a descargar desde MT5 (M1/M5/M15/M30/H1/H4/D1/W1/MN1)
 timeframe: "D1"
 
-# Cuántas barras traer desde MT5 antes de cualquier recorte/resampleo.
+# Cantidad de barras crudas a traer desde MT5 antes de recortes/resampleo
 cantidad_datos: 1500
 
-# Conexión a MetaTrader 5
+# Credenciales/ruta MT5 (opcional aquí si ya las maneja Basic_funcs por otro lado)
 mt5:
   login: 68238343
   password: "Colombia123*"
@@ -22,158 +21,95 @@ mt5:
   path: "C:\\Program Files\\RoboForex - MetaTrader 5\\terminal64.exe"
 
 # ================================
-# EDA (Exploratory Data Analysis)
+# EDA / PREPROCESO
 # ================================
 eda:
-  # Frecuencia de resampleo para estandarizar OHLC antes de los análisis.
-  # H = intradía por horas (H1/H4); D = diario.
-  frecuencia_resampleo: "D"
+  # Frecuencia a la que se estandariza la serie de cierre (si aplica)
+  frecuencia_resampleo: "H"   # "H" u "D"; el agente la usa en cfg_local
 
 # ================================
-# MODO NORMAL (compatibilidad)
+# RECORTE DE DATOS PARA TRABAJO
 # ================================
-# Se usará solo si NO existe 'modelos:' con activos.
-modelo:
-  nombre: "ARIMA"           # "ARIMA" | "SARIMA" | "PROPHET" | "LSTM"
-  objetivo: "retornos"      # "retornos" | "nivel"
-  horizonte: 5
-  params:
-    order: [1, 1, 1]
-    seasonal_order: [0, 0, 0, 0]
-    enforce_stationarity: false
-    enforce_invertibility: false
-
-
-validacion:
-  modo: "last_n"        # "last_n" | "date_range"
-  n: 500                # si modo=last_n: últimos N puntos para el set de prueba (test/validación)
-  # Alternativa:
-  # start: "2024-01-01" # si modo=date_range (inclusive)
-  # end:   "2024-12-31"
+data_window:
+  # Modo de recorte de datos de trabajo antes de split train/test
+  # - last_n_bars: toma las últimas n_bars
+  # - date_range:  usa el rango [start, end]
+  mode: "last_n_bars"
+  n_bars: 1000
+  start: null        # "2022-01-01"
+  end: null          # "2024-12-31"
 
 # ================================
-# CATÁLOGO DE MODELOS (multi-modelo)
-# ================================
-# El pipeline ejecuta TODOS los modelos con enabled: true, en el modo seleccionado (normal o backtest).
-modelos:
-  - name: "ARIMA"
-    enabled: true
-    objetivo: "retornos"
-    horizonte: 5
-    params:
-      auto: true          # selección por ventana
-      metric: aic         # o "bic"
-      seasonal: false     # true si hay estacionalidad; define m
-      m: 12               # solo si seasonal=true
-      modo: retornos      # o "nivel"
-      max_p: 2
-      max_q: 2
-      max_P: 2
-      max_Q: 2
-      max_d: 2
-      max_D: 1
-      enforce_stationarity: false
-      enforce_invertibility: false
-    normal: {}
-    backtest:
-      engine: "model" 
-# --------------------------------
-  # 2. RANDOM WALK (Nuevo)
-  # --------------------------------
-  - name: "RW"  # Puede llamarlo "RandomWalk" o "RW"
-    enabled: true
-    objetivo: "retornos" # O 'level'
-    horizonte: 5
-    params:
-      # Fija el orden a (0, 1, 0)
-      order: [0, 1, 0] 
-      # Sin estacionalidad
-      seasonal_order: [0, 0, 0, 0] 
-      enforce_stationarity: false
-      enforce_invertibility: false
-    normal: {}
-    backtest:
-      # También debe usar el motor 'classic_auto'
-      engine: "classic_auto"
-
-  - name: "PROPHET"
-    enabled: true
-    objetivo: "retornos"
-    horizonte: 5
-    params:
-      frequency_hint: "D1"          # CLAVE para intradía H1/H4
-      changepoint_prior_scale: 0.05
-      seasonality_mode: "additive"
-    normal: {}
-    backtest:
-      engine: "model"
-      prophet:
-        frequency_hint: "D1"
-        yearly_seasonality: false
-        weekly_seasonality: true
-        daily_seasonality: true
-        interval_width: 0.9
-
-  - name: "LSTM"
-    enabled: true
-    objetivo: "retornos"
-    horizonte: 5
-    params:
-      window: 64
-      units: 64
-      dropout: 0.2
-      epochs: 40
-      batch_size: 32
-      lr: 0.001
-      loss: "mse"
-      optimizer: "adam"
-      scaler: "standard"
-      patience: 5
-      model_dir: "outputs/modelos/lstm"
-    normal: {}
-    backtest:
-      engine: "model"
-      lstm:
-        horizon: 5
-
-# ================================
-# BACKTEST (walk-forward)
+# BACKTEST / SEÑALES
 # ================================
 bt:
-  initial_train: 800
-  step: 50
-  horizon: 1
-  target: "returns"         # 'returns' | 'level'
+  target: "returns"          # "returns" o "price"
   pip_size: 0.0001
-
-  # Umbrales de decisión
-  threshold_mode: "fixed"   # 'fixed' | 'atr' | 'garch'
-  threshold_pips: 12.0
-  atr_window: 14
-  atr_k: 0.60
-  garch_k: 0.60
-  min_threshold_pips: 10.0
-  log_threshold_used: false
-
-  # Auto-modelo (ARIMA/SARIMA)
-  auto:
-    scan: {}
-    rescan_each_refit: false
-    rescan_every_refits: 999999
-
-  # Exógenas (opcional)
-  exog:
-    enable: false
-    lags: [1, 2, 3]
-
-  # Salidas
-  outxlsx: "outputs/evaluacion.xlsx"
-  outdir_plots: "outputs/backtest_plots"
+  threshold_mode: "fixed"    # fixed/ATR/GARCH (si tu exportador soporta)
+  threshold_pips: 12         # umbral en pips para convertir predicción a señal {1,0,-1}
 
 # ================================
-# DEFAULTS POR MODO (opcional)
+# SPLIT DE VALIDACIÓN (HOLD-OUT FINAL)
 # ================================
-defaults:
-  normal: {}
-  backtest: {}
+validacion:
+  # Define el bloque TEST que usa test_y_ejecucion.py
+  # - last_n:       usa las últimas n observaciones como TEST
+  # - date_range:   usa el rango [start, end] como TEST
+  modo: "last_n"
+  n: 300
+  start: null
+  end: null
 
+# ================================
+# LISTA DE MODELOS Y SUS PARÁMETROS
+# ================================
+modelos:
+  - name: "ARIMA"
+    params:
+      seasonal: false       # pon true si detectas estacionalidad
+      stepwise: true
+      max_p: 2
+      max_q: 2
+      max_P: 1
+      max_Q: 1
+      max_order: 4
+      suppress_warnings: true
+
+  - name: "PROPHET"
+    params:
+      yearly_seasonality: false
+      weekly_seasonality: false
+      daily_seasonality: true
+      changepoint_prior_scale: 0.05
+      n_changepoints: 10
+
+  - name: "LSTM"
+    params:
+      window: 64            # tamaño de ventana para features
+      epochs: 10            # súbelo si necesitas más ajuste (ojo al costo)
+      batch_size: 32
+
+# ================================
+# AGENTE (VALIDACIÓN Y DECISIÓN)
+# ================================
+agent:
+  validation:
+    # Cada cuántos pasos del rolling refitear si el modelo no soporta update()
+    refit_stride: 20
+
+  decision:
+    da_proceed: 0.55        # 55%
+    da_proceed_lo: 0.53     # si N_test grande (>= 1000)
+    rmse_gain: 0.90         # RMSE <= 0.90 * RMSE_baseline
+    dm_p_proceed: 0.10
+    dm_p_watch: 0.20
+    n_min_test: 200
+    atr_cap_mult: 2.0
+
+# ================================
+# REPORTES / SALIDAS
+# ================================
+reportes:
+  outdir_backtest: "outputs/backtest_plots"
+  outdir_validacion: "outputs/validacion"
+  excel_validacion: "validacion_consolidado.xlsx"

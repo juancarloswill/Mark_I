@@ -75,6 +75,38 @@ def _import_bt():
 
     return evaluate_many, save_backtest_excel, save_backtest_plots, run_backtest, run_backtest_many
 
+def _apply_data_window(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """
+    Aplica una ventana temporal opcional:
+    - last_n_bars: recorta a las últimas N filas tras preparar el df.
+    - date_range : recorta por rango [start, end]. Si end es None => hasta el último dato.
+    """
+    if not isinstance(cfg, dict) or not cfg:
+        return df
+
+    mode = str(cfg.get("mode", "last_n_bars")).lower()
+    if mode == "date_range":
+        start = cfg.get("start", None)
+        end = cfg.get("end", None)
+        if start is None and end is None:
+            return df
+        if start is not None:
+            start = pd.to_datetime(start)
+        if end is not None:
+            end = pd.to_datetime(end)
+        # Nota: si end es None, .loc[start:] ya lleva hasta el último índice disponible.
+        if start is not None and end is not None:
+            return df.loc[start:end]
+        elif start is not None:
+            return df.loc[start:]
+        else:
+            return df.loc[:end]
+    else:
+        n = int(cfg.get("n_bars", 0))
+        if n > 0 and n < len(df):
+            return df.iloc[-n:]
+        return df
+
 
 def _import_reporter() -> Optional[Callable[..., None]]:
     """
@@ -366,7 +398,7 @@ def run_modo_normal(df: pd.DataFrame, price_col: str, config: dict) -> None:
     if nombre == "lstm":
         win = int(params.get("window", 64))
         last_window = price.iloc[-win:]
-        pred = model.predict(horizonte, last_window=last_window, last_timestamp=price.index[-1])
+        pred = model.predict(horizonte, last_timestamp=price.index[-1], last_window=last_window)
     else:
         pred = model.predict(horizonte)
 
@@ -427,6 +459,11 @@ def run_modo_backtest(df: pd.DataFrame, price_col: str, config: dict) -> None:
     eda_freq = config.get("eda", {}).get("frecuencia_resampleo", "H")
     cfg_bt = config.get("bt", {})
 
+    # === NEW: Split train/valid para que el backtest use solo train ===
+    cfg_valid = config.get("validacion", {}) or {}
+    price_train, price_valid = _split_train_valid(price, cfg_valid)
+    price_bt = price_train if price_valid is not None else price
+
     engine = cfg_bt.get("engine")
     modelo_nombre_raw = str(config.get("modelo", {}).get("nombre", "ARIMA"))
     modelo_nombre = modelo_nombre_raw.strip().lower()
@@ -449,9 +486,11 @@ def run_modo_backtest(df: pd.DataFrame, price_col: str, config: dict) -> None:
         min_threshold_pips = float(cfg_bt.get("min_threshold_pips", 10.0))
         log_threshold_used = bool(cfg_bt.get("log_threshold_used", False))
 
+        # ATR/GARCH sobre el mismo rango del backtest (train)
         df_for_atr = df.rename(columns={price_col: "Close"})
-        atr_pips_series = compute_atr_pips(df_for_atr, window=atr_window, pip_size=pip_size)
-        garch_sigma_pips = compute_garch_sigma_pips(price, pip_size=pip_size) if _HAS_GARCH else None
+        df_for_atr_bt = df_for_atr.reindex(price_bt.index)
+        atr_pips_series = compute_atr_pips(df_for_atr_bt, window=atr_window, pip_size=pip_size)
+        garch_sigma_pips = compute_garch_sigma_pips(price_bt, pip_size=pip_size) if _HAS_GARCH else None
 
         specs = [
             {"name": "RW_RETURNS", "kind": "rw"},
@@ -463,7 +502,7 @@ def run_modo_backtest(df: pd.DataFrame, price_col: str, config: dict) -> None:
         print(f"[AUTO] step={step}, horizon={horizon}, target={target}, thr_mode={threshold_mode}")
 
         summary, preds_map = evaluate_many(
-            price, specs,
+            price_bt, specs,
             initial_train=initial_train, step=step, horizon=horizon, target=target,
             pip_size=pip_size, threshold_pips=threshold_pips,
             exog_ret=None, exog_lags=None, threshold_mode=threshold_mode,
@@ -477,12 +516,12 @@ def run_modo_backtest(df: pd.DataFrame, price_col: str, config: dict) -> None:
         os.makedirs(os.path.dirname(outxlsx), exist_ok=True)
         os.makedirs(outdir_plots, exist_ok=True)
 
-        # Exportador centralizado (si existe)
+        # Exportador centralizado (si existe) — pasar price_bt para alinear índices
         if _exportar_excel is not None:
             try:
                 _exportar_excel(
                     path_xlsx=outxlsx,
-                    price=price,
+                    price=price_bt,
                     preds_map=preds_map,
                     summary=summary,
                     config=config,
@@ -497,7 +536,7 @@ def run_modo_backtest(df: pd.DataFrame, price_col: str, config: dict) -> None:
             save_backtest_excel(outxlsx, summary, preds_map)
 
         try:
-            save_backtest_plots(outdir_plots, price, preds_map, pip_size, threshold_pips)
+            save_backtest_plots(outdir_plots, price_bt, preds_map, pip_size, threshold_pips)
         except Exception as e:
             print(f"ℹ️ Plots omitidos: {e}")
         try:
@@ -514,19 +553,26 @@ def run_modo_backtest(df: pd.DataFrame, price_col: str, config: dict) -> None:
         modelo_nombre: cfg_bt.get(modelo_nombre, {})
     }
     model = get_model(modelo_nombre, cfg_local)
-    pred_df = run_backtest(price, model, cfg_local)
+    model.fit(price_bt)
+
+    if modelo_nombre == "lstm":
+        win = int(cfg_bt.get(modelo_nombre, {}).get("window", 64))
+        last_window = price_bt.iloc[-win:]
+        pred_df = run_backtest(price_bt, model, cfg_local)
+    else:
+        pred_df = run_backtest(price_bt, model, cfg_local)
 
     os.makedirs("outputs/modelos", exist_ok=True)
     out = f"outputs/modelos/{config.get('simbolo','EURUSD')}_{_safe_model_tag(modelo_nombre_raw)}_backtest.csv"
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    _normalize_for_csv(pred_df, price=price).to_csv(out, index=True)
+    _normalize_for_csv(pred_df, price=price_bt).to_csv(out, index=True)
     print(f"💾 Backtest (engine=model) guardado en {out}")
 
     if _exportar_excel is not None:
         try:
             _exportar_excel(
                 path_xlsx=config.get("bt", {}).get("outxlsx", "outputs/evaluacion.xlsx"),
-                price=price,
+                price=price_bt,
                 preds_map={modelo_nombre_raw: pred_df},
                 summary=None,
                 config=config
@@ -551,6 +597,12 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
 
     # ------------------------ Datos base ------------------------
     price = df[price_col].astype(float)
+
+    # === NEW: Split train/valid para que el backtest use solo train ===
+    cfg_valid = config.get("validacion", {}) or {}
+    price_train, price_valid = _split_train_valid(price, cfg_valid)
+    price_bt = price_train if price_valid is not None else price
+
     bt = config.get("bt", {})
     initial_train = int(bt.get("initial_train", 1500))
     step = int(bt.get("step", 10))
@@ -574,20 +626,20 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
     outdir_multi = Path(bt.get("outdir_plots", "outputs/backtest_plots"))
     outdir_multi.mkdir(parents=True, exist_ok=True)
 
-    # ----------------- 1) Modelos de CLASE (Prophet/LSTM) -----------------
+    # ----------------- 1) Modelos de CLASE (Prophet/LSTM/ARIMA adapter) -----------------
     class_models = [m for m in models if m["name"].strip().lower() in {"prophet", "lstm", "arima"} and m.get("enabled", True)]
     cfg_global = {
         "freq": "H" if str(freq).upper().startswith("H") else "D",
         "target": target,
         "backtest": {"ventanas": initial_train, "step": step, "horizon": horizon}
     }
-    pred_map_class = run_backtest_many(price, class_models, cfg_global)
+    pred_map_class = run_backtest_many(price_bt, class_models, cfg_global)
 
     # Guardar CSV por modelo de clase (inspección rápida) + contexto para métricas
     export_backtest_csv_per_model(
         symbol=symbol_safe,
         pred_map=pred_map_class,
-        price=price,
+        price=price_bt,
         outdir=outdir_multi,
         target=target,
         pip_size=pip_size,
@@ -606,7 +658,7 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
     export_backtest_excel_consolidado(
         symbol=symbol_safe,
         pred_map=pred_map_class,
-        price=price,
+        price=price_bt,
         excel_path=excel_path,
         target=target,
         pip_size=pip_size,
@@ -626,7 +678,7 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
         name_safe = _safe_model_tag(name)
         out_csv = outdir_multi / f"{config.get('simbolo','SYMB')}_{name_safe}_backtest.csv"
         out_csv.parent.mkdir(parents=True, exist_ok=True)
-        _normalize_for_csv(mat, price=price).to_csv(out_csv, index=True)
+        _normalize_for_csv(mat, price=price_bt).to_csv(out_csv, index=True)
         print(f"💾 [{name}] Backtest guardado en {out_csv}")
 
     # ----------------- 2) ¿ARIMA/SARIMA habilitados? -----------------
@@ -638,7 +690,7 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
     summary_auto = None
 
     if has_arima:
-        # Prepara insumos de umbral/volatilidad
+        # Prepara insumos de umbral/volatilidad (sobre train)
         atr_window = int(bt.get("atr_window", 14))
         atr_k = float(bt.get("atr_k", 0.60))
         garch_k = float(bt.get("garch_k", 0.60))
@@ -646,8 +698,9 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
         log_threshold_used = bool(bt.get("log_threshold_used", False))
 
         df_for_atr = df.rename(columns={price_col: "Close"})
-        atr_pips_series = compute_atr_pips(df_for_atr, window=atr_window, pip_size=pip_size)
-        garch_sigma_pips = compute_garch_sigma_pips(price, pip_size=pip_size) if _HAS_GARCH else None
+        df_for_atr_bt = df_for_atr.reindex(price_bt.index)
+        atr_pips_series = compute_atr_pips(df_for_atr_bt, window=atr_window, pip_size=pip_size)
+        garch_sigma_pips = compute_garch_sigma_pips(price_bt, pip_size=pip_size) if _HAS_GARCH else None
 
         specs = [
             {"name": "RW_RETURNS", "kind": "rw"},
@@ -662,7 +715,7 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
         print(f"[AUTO] step={step}, horizon={horizon}, target={target}, thr_mode={threshold_mode}")
 
         summary_auto, preds_map_auto = evaluate_many(
-            price, specs,
+            price_bt, specs,
             initial_train=initial_train, step=step, horizon=horizon, target=target,
             pip_size=pip_size, threshold_pips=threshold_pips,
             exog_ret=None, exog_lags=None, threshold_mode=threshold_mode,
@@ -676,7 +729,7 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
             k_safe = _safe_model_tag(k)
             out = outdir_multi / f"{config.get('simbolo','SYMB')}_{k_safe}_backtest.csv"
             out.parent.mkdir(parents=True, exist_ok=True)
-            _normalize_for_csv(v, price=price).to_csv(out, index=True)
+            _normalize_for_csv(v, price=price_bt).to_csv(out, index=True)
             print(f"💾 [{k}] Backtest guardado en {out}")
 
         # Mezcla resultados
@@ -687,7 +740,7 @@ def run_modo_backtest_multi(df: pd.DataFrame, price_col: str, config: dict) -> N
         try:
             _exportar_excel(
                 path_xlsx=bt.get("outxlsx", "outputs/evaluacion.xlsx"),
-                price=price,
+                price=price_bt,
                 preds_map=merged_map,
                 summary=summary_auto,  # puede ser None si no hubo ARIMA/SARIMA
                 config=config
@@ -733,6 +786,9 @@ def main():
         price_col = _find_close(df)
         df = _ensure_dt_index(df)
         df = _resample_ohlc(df, freq=eda_cfg.get("frecuencia_resampleo", "H"), price_col=price_col)
+        # Recorte opcional por ventana (últimas N barras o rango de fechas)
+        df = _apply_data_window(df, config.get("data_window", {}) or {})
+
 
         if args.modo == "eda":
             run_modo_eda(df, config)
