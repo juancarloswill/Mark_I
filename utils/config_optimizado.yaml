@@ -1,123 +1,131 @@
+# ============================================
+# CONFIGURACIÓN OPTIMIZADA (con validación)
+# ============================================
+
 simbolo: EURUSD
 simbolo_spy: US500
 timeframe: D1
 cantidad_datos: 1500
+
 mt5:
   login: 68238343
-  password: Colombia123*
-  server: RoboForex-Pro
-  path: C:\Program Files\RoboForex - MetaTrader 5\terminal64.exe
+  password: "Colombia123*"
+  server: "RoboForex-Pro"
+  path: "C:\\Program Files\\RoboForex - MetaTrader 5\\terminal64.exe"
+
 eda:
   frecuencia_resampleo: D
+
+# ---- Modelo "principal" (si algún flujo requiere uno por defecto) ----
 modelo:
   nombre: ARIMA
-  objetivo: retornos
+  objetivo: retornos        # opciones: retornos | precio
   horizonte: 5
   params:
-    order:
-    - 0
-    - 1
-    - 2
-    seasonal_order:
-    - 0
-    - 0
-    - 0
-    - 0
+    order: [0, 1, 2]
+    seasonal_order: [0, 0, 0, 0]
     enforce_stationarity: false
     enforce_invertibility: false
+
+# ---- Split de VALIDACIÓN (hold-out final) usado por el agente ----
 validacion:
-  modo: last_n
-  n: 500
+  modo: last_n              # opciones: last_n | date_range
+  n: 500                    # si modo=last_n
+  # start: 2022-01-01       # si modo=date_range (opcional)
+  # end:   2024-12-31
+
+# ---- Estrategia de refits durante la validación (para bajar costo) ----
+agent:
+  validation:
+    refit_stride: 20        # refit cada 20 pasos (si no hay update()), en vez de 1
+
+# ---- Lista de modelos a considerar (backtest/validación) ----
 modelos:
-- name: ARIMA
-  enabled: true
-  objetivo: retornos
-  horizonte: 5
-  params:
-    auto: false
-    metric: aic
-    seasonal: false
-    m: 12
-    modo: retornos
-    max_p: 2
-    max_q: 2
-    max_P: 2
-    max_Q: 2
-    max_d: 2
-    max_D: 1
-    enforce_stationarity: false
-    enforce_invertibility: false
-    order:
-    - 0
-    - 1
-    - 2
-  normal: {}
-  backtest:
-    engine: model
-- name: RW
-  enabled: true
-  objetivo: retornos
-  horizonte: 5
-  params:
-    order:
-    - 0
-    - 1
-    - 0
-    seasonal_order:
-    - 0
-    - 0
-    - 0
-    - 0
-    enforce_stationarity: false
-    enforce_invertibility: false
-  normal: {}
-  backtest:
-    engine: classic_auto
-- name: PROPHET
-  enabled: true
-  objetivo: retornos
-  horizonte: 5
-  params:
-    frequency_hint: D1
-    changepoint_prior_scale: 0.5
-    seasonality_mode: multiplicative
-  normal: {}
-  backtest:
-    engine: model
-    prophet:
+  - name: ARIMA
+    enabled: true
+    objetivo: retornos
+    horizonte: 5
+    params:
+      auto: false
+      metric: aic
+      seasonal: false
+      m: 12
+      modo: retornos
+      max_p: 2
+      max_q: 2
+      max_P: 2
+      max_Q: 2
+      max_d: 2
+      max_D: 1
+      enforce_stationarity: false
+      enforce_invertibility: false
+      order: [0, 1, 2]
+    normal: {}
+    backtest:
+      engine: model
+
+  - name: RW
+    enabled: true
+    objetivo: retornos
+    horizonte: 5
+    params:
+      order: [0, 1, 0]
+      seasonal_order: [0, 0, 0, 0]
+      enforce_stationarity: false
+      enforce_invertibility: false
+    normal: {}
+    backtest:
+      engine: classic_auto
+
+  - name: PROPHET
+    enabled: true
+    objetivo: retornos
+    horizonte: 5
+    params:
       frequency_hint: D1
-      yearly_seasonality: false
-      weekly_seasonality: true
-      daily_seasonality: true
-      interval_width: 0.9
-- name: LSTM
-  enabled: true
-  objetivo: retornos
-  horizonte: 5
-  params:
-    window: 64
-    units: 64
-    dropout: 0.2
-    epochs: 40
-    batch_size: 32
-    lr: 0.001
-    loss: mse
-    optimizer: adam
-    scaler: standard
-    patience: 5
-    model_dir: outputs/modelos/lstm
-  normal: {}
-  backtest:
-    engine: model
-    lstm:
-      horizon: 5
+      changepoint_prior_scale: 0.5
+      seasonality_mode: multiplicative
+    normal: {}
+    backtest:
+      engine: model
+      prophet:
+        frequency_hint: D1
+        yearly_seasonality: false
+        weekly_seasonality: true
+        daily_seasonality: true
+        interval_width: 0.9
+
+  - name: LSTM
+    enabled: true
+    objetivo: retornos
+    horizonte: 5
+    params:
+      window: 64
+      units: 64
+      dropout: 0.2
+      epochs: 40
+      batch_size: 32
+      lr: 0.001
+      loss: mse
+      optimizer: adam
+      scaler: standard
+      patience: 5
+      model_dir: "outputs/modelos/lstm"
+      reuse_pretrained: true
+    normal: {}
+    backtest:
+      engine: model
+      lstm:
+        horizon: 5
+
+# ---- Backtest (parámetros globales) ----
 bt:
   initial_train: 800
   step: 50
   horizon: 1
-  target: returns
+  target: returns            # returns | price
   pip_size: 0.0001
-  threshold_mode: fixed
+  threshold_mode: fixed      # fixed | ATR | GARCH (si tu exportador lo soporta)
   threshold_pips: 12.0
   atr_window: 14
   atr_k: 0.6
@@ -130,12 +138,89 @@ bt:
     rescan_every_refits: 999999
   exog:
     enable: false
-    lags:
-    - 1
-    - 2
-    - 3
-  outxlsx: outputs/evaluacion.xlsx
-  outdir_plots: outputs/backtest_plots
+    lags: [1, 2, 3]
+  outxlsx: "outputs/evaluacion.xlsx"
+  outdir_plots: "outputs/backtest_plots"
+
+# ---- Logging opcional (telemetría) ----
+logging:
+  enable: true
+  level: INFO               # DEBUG | INFO | WARNING | ERROR
+  show_console: true
+  to_file: true
+  file_path: "logs/marki.log"
+  profile:
+    enable: true
+    every_n_steps: 10
+    with_memory: false      # requiere psutil
+
 defaults:
   normal: {}
   backtest: {}
+
+# ============================================
+# SANITY CHECKS (validación de configuración)
+# -> Tu código puede leer este bloque y validar antes de correr.
+# ============================================
+sanity_checks:
+  enforce: true
+
+  allowed_values:
+    timeframe: ["D1"]
+    eda.frecuencia_resampleo: ["D", "H"]
+    modelo.objetivo: ["retornos", "precio"]
+    modelos[].objetivo: ["retornos", "precio"]
+    bt.target: ["returns", "price"]
+    validacion.modo: ["last_n", "date_range"]
+    modelos[].backtest.engine: ["model", "classic_auto"]
+    modelos[].params.optimizer: ["adam", "sgd", "rmsprop", "adagrad", "adamw"]
+
+  ranges:
+    cantidad_datos: {min: 500, max: 50000}
+    validacion.n:   {min: 50,  max: 5000}
+    bt.initial_train: {min: 200, max: 20000}
+    bt.step:          {min: 1,   max: 2000}
+    bt.horizon:       {min: 1,   max: 50}
+    bt.threshold_pips: {min: 0.1, max: 200.0}
+    modelos[].params.window:     {min: 8, max: 512}
+    modelos[].params.epochs:     {min: 1, max: 1000}
+    modelos[].params.batch_size: {min: 1, max: 1024}
+    modelos[].params.lr:         {min: 1.0e-06, max: 1.0}
+
+  rules:
+    - name: "timeframe_vs_resample"
+      if: {timeframe: "D1"}
+      then:
+        eda.frecuencia_resampleo_in: ["D"]
+
+    - name: "objetivo_global_bt"
+      if: {modelo.objetivo: "retornos"}
+      then: {bt.target: "returns"}
+
+    - name: "objetivo_modelos_consistencia"
+      for_each: "modelos[]"
+      then_any:
+        - equals: {left: "item.objetivo", right: "modelo.objetivo"}
+        - note: "Se permite objetivo distinto, pero el pipeline debe convertir coherentemente."
+
+    - name: "lstm_window_horizon"
+      when_all:
+        - any_of:
+            - equals: {left: "item.name", right: "LSTM"}
+        - exists: "item.params.window"
+      then:
+        ge: {left: "item.params.window", right: 2}
+
+    - name: "arima_order_shape"
+      for_each: "modelos[]"
+      when_all:
+        - any_of:
+            - equals: {left: "item.name", right: "ARIMA"}
+            - equals: {left: "item.name", right: "RW"}
+        - exists: "item.params.order"
+      then:
+        len_eq: {left: "item.params.order", right: 3}
+
+  messages:
+    timeframe: "Este proyecto está estandarizado a D1 (daily)."
+    objetivo: "Usa 'retornos' si tu bt.target=returns; de lo contrario, ajusta conversión de niveles↔retornos."

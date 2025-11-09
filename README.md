@@ -241,6 +241,7 @@ Define un modelo en `modelo:` y su configuración en `bt:`:
 
 ```bash
 python -m app.main --modo backtest --config utils/config.yaml
+python -m app.main --modo backtest --config utils/config_optimizado.yaml
 ```
 
 - Para **ARIMA/SARIMA**, usa el motor **clásico** (`classic_auto`) con umbrales `fixed/atr/garch`.

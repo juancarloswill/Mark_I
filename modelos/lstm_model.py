@@ -292,3 +292,60 @@ class LSTMModel:
                     idx = pd.RangeIndex(start=1, stop=horizon + 1, step=1)
 
         return pd.DataFrame({"yhat": preds.reshape(-1)}, index=idx)
+    
+    def load_pretrained(self) -> bool:
+        """
+        Carga scaler + modelo desde self.model_dir.
+        Retorna True si carga algo útil.
+        """
+        import json
+        loaded = False
+        latest = os.path.join(self.model_dir, "lstm_latest.keras")
+        best_w = os.path.join(self.model_dir, "lstm_best.weights.h5")
+        scalerp = os.path.join(self.model_dir, "scaler.json")
+
+        # scaler
+        try:
+            if os.path.isfile(scalerp):
+                with open(scalerp, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                # reconstruir scaler
+                name = (d or {}).get("name", "standard")
+                if name == "none":
+                    self._scaler = _build_scaler("none")
+                else:
+                    self._scaler = _build_scaler(name)
+                    for k, v in (d.items()):
+                        if k in ("mean_", "std_", "min_", "max_"):
+                            setattr(self._scaler, k, float(v))
+                loaded = True
+        except Exception as e:
+            print(f"ℹ️ No se pudo cargar scaler.json: {e}")
+
+        # modelo
+        try:
+            if os.path.isfile(latest):
+                self._model = keras.models.load_model(latest)
+                return True
+        except Exception as e:
+            print(f"ℹ️ No se pudo cargar lstm_latest.keras: {e}")
+
+        # si no hay modelo completo, intenta pesos
+        try:
+            if self._model is None:
+                self._model = keras.Sequential([
+                    layers.Input(shape=(self.window, 1)),
+                    layers.LSTM(self.units, return_sequences=False),
+                    layers.Dropout(self.dropout),
+                    layers.Dense(1)
+                ])
+                opt = optimizers.Adam(learning_rate=self.lr) if str(self.optimizer).lower()=="adam" else optimizers.Adam(learning_rate=self.lr)
+                self._model.compile(optimizer=opt, loss=self.loss)
+
+            if os.path.isfile(best_w):
+                self._model.load_weights(best_w)
+                loaded = True
+        except Exception as e:
+            print(f"ℹ️ No se pudieron cargar best weights: {e}")
+
+        return loaded

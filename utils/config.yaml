@@ -7,13 +7,13 @@ simbolo: "EURUSD"
 # Símbolo adicional (opcional) para comparativos o exógenas
 simbolo_spy: "US500"
 
-# Timeframe nativo a descargar desde MT5 (M1/M5/M15/M30/H1/H4/D1/W1/MN1)
+# Timeframe nativo a descargar desde MT5 (siempre D1)
 timeframe: "D1"
 
 # Cantidad de barras crudas a traer desde MT5 antes de recortes/resampleo
 cantidad_datos: 1500
 
-# Credenciales/ruta MT5 (opcional aquí si ya las maneja Basic_funcs por otro lado)
+# Credenciales/ruta MT5 (si ya las maneja Basic_funcs en otro lugar, puedes dejarlas aquí igual)
 mt5:
   login: 68238343
   password: "Colombia123*"
@@ -24,8 +24,9 @@ mt5:
 # EDA / PREPROCESO
 # ================================
 eda:
-  # Frecuencia a la que se estandariza la serie de cierre (si aplica)
-  frecuencia_resampleo: "H"   # "H" u "D"; el agente la usa en cfg_local
+  # Frecuencia a la que se estandariza la serie de cierre
+  # Para D1, déjalo en "D" (no cambia granularidad, solo estandariza interfaz)
+  frecuencia_resampleo: "D"
 
 # ================================
 # RECORTE DE DATOS PARA TRABAJO
@@ -61,7 +62,7 @@ validacion:
   end: null
 
 # ================================
-# LISTA DE MODELOS Y SUS PARÁMETROS
+# LISTA DE MODELOS Y SUS PARÁMETROS (fuente ÚNICA de hiperparámetros)
 # ================================
 modelos:
   - name: "ARIMA"
@@ -79,7 +80,7 @@ modelos:
     params:
       yearly_seasonality: false
       weekly_seasonality: false
-      daily_seasonality: true
+      daily_seasonality: false  # En D1 no es usual daily_seasonality
       changepoint_prior_scale: 0.05
       n_changepoints: 10
 
