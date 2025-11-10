@@ -1,0 +1,71 @@
+# utils/execution_windows.yaml
+# Config con sesiones y zona horaria para MT5
+
+mt5_credentials:
+  login: 68238343
+  password: "Colombia123*"
+  server: "RoboForex-Pro"
+  path: "C:\\Program Files\\RoboForex - MetaTrader 5\\terminal64.exe"
+
+symbol: "EURUSD"
+risk_pct: 0.01
+bot_comment: "ExecAgent"
+
+max_spread_points: 25
+
+# Ventanas por día en zona horaria fija (recomendado usar NY para FX)
+trading_time:
+  timezone: "America/New_York"
+  use_server_time: false        # pon true si prefieres basarte en hora del servidor MT5
+  sessions:
+    Sun: [[17, 24]]             # apertura
+    Mon: [[0, 24]]
+    Tue: [[0, 24]]
+    Wed: [[0, 24]]
+    Thu: [[0, 24]]
+    Fri: [[0, 17]]              # cierre
+
+# Construcción de niveles cuando la señal no los trae
+levels_rules:
+  mode: "rr"                    # "from_model" | "fixed_pips" | "rr"
+  rr:
+    sl_pips: 20
+    rr_ratio: 1.5
+  fixed_pips:
+    sl_pips: 20
+    tp_pips: 30
+
+breakeven:
+  enabled: true
+  progress_pct_to_be: 60
+  wait_seconds_after_open: 5
+
+# Opción A: archivo de señal (si lo usas, completa esto y deja vacío best_model_metrics)
+signal_file: ""           # ej.: "C:\\...\\senal_actual.csv"
+signal_sheet: null
+
+# Opción B: seleccionar mejor modelo y tomar su última señal
+best_model_metrics:
+  file: "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\validacion_consolidado.xlsx"
+  sheet: "metrics"
+  criterion: "Direction_Accuracy"
+  model_to_csv:
+    ARIMA:   "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\EURUSD_ARIMA_backtest.csv"
+    LSTM:    "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\EURUSD_LSTM_backtest.csv"
+    PROPHET: "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\EURUSD_PROPHET_backtest.csv"
+
+
+# Formato de la hoja 'metrics' (opcional; el agente detecta automáticamente, pero puedes forzar/ayudar)
+best_model_metrics:
+  file: "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\validacion_consolidado.xlsx"
+  sheet: "metrics"
+  criterion: "Direction_Accuracy"
+  # Descomenta si tu hoja está en formato LONG y la columna del modelo tiene otro nombre
+  # model_column: "Modelo"
+  # Descomenta si tu hoja está en formato WIDE: esta es la columna que contiene los nombres de métricas
+  # metric_name_column: "Metric"
+  # wide_format: true  # Fuerza interpretación WIDE si lo deseas
+  model_to_csv:
+    ARIMA:   "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\EURUSD_ARIMA_backtest.csv"
+    LSTM:    "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\EURUSD_LSTM_backtest.csv"
+    PROPHET: "C:\\Users\\USER\\Documentos\\Maestria\\Mark_I\\outputs\\validacion\\EURUSD_PROPHET_backtest.csv"

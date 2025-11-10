@@ -17,15 +17,15 @@ eda:
   frecuencia_resampleo: D
 
 # ---- Modelo "principal" (si algún flujo requiere uno por defecto) ----
-modelo:
-  nombre: ARIMA
-  objetivo: retornos        # opciones: retornos | precio
-  horizonte: 5
-  params:
-    order: [0, 1, 2]
-    seasonal_order: [0, 0, 0, 0]
-    enforce_stationarity: false
-    enforce_invertibility: false
+#modelo:
+#  nombre: ARIMA
+#  objetivo: retornos        # opciones: retornos | precio
+#  horizonte: 5
+#  params:
+#    order: [0, 1, 2]
+#    seasonal_order: [0, 0, 0, 0]
+#    enforce_stationarity: false
+#   enforce_invertibility: false
 
 # ---- Split de VALIDACIÓN (hold-out final) usado por el agente ----
 validacion:
@@ -49,7 +49,7 @@ modelos:
       auto: false
       metric: aic
       seasonal: false
-      m: 12
+      order: [0, 1, 2]
       modo: retornos
       max_p: 2
       max_q: 2
@@ -59,7 +59,7 @@ modelos:
       max_D: 1
       enforce_stationarity: false
       enforce_invertibility: false
-      order: [0, 1, 2]
+      
     normal: {}
     backtest:
       engine: model
