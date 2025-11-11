@@ -16,28 +16,15 @@ mt5:
 eda:
   frecuencia_resampleo: D
 
-# ---- Modelo "principal" (si algún flujo requiere uno por defecto) ----
-#modelo:
-#  nombre: ARIMA
-#  objetivo: retornos        # opciones: retornos | precio
-#  horizonte: 5
-#  params:
-#    order: [0, 1, 2]
-#    seasonal_order: [0, 0, 0, 0]
-#    enforce_stationarity: false
-#   enforce_invertibility: false
-
 # ---- Split de VALIDACIÓN (hold-out final) usado por el agente ----
 validacion:
-  modo: last_n              # opciones: last_n | date_range
-  n: 500                    # si modo=last_n
-  # start: 2022-01-01       # si modo=date_range (opcional)
-  # end:   2024-12-31
+  modo: last_n
+  n: 500
 
 # ---- Estrategia de refits durante la validación (para bajar costo) ----
 agent:
   validation:
-    refit_stride: 20        # refit cada 20 pasos (si no hay update()), en vez de 1
+    refit_stride: 20
 
 # ---- Lista de modelos a considerar (backtest/validación) ----
 modelos:
@@ -46,23 +33,22 @@ modelos:
     objetivo: retornos
     horizonte: 5
     params:
-      auto: false
+      auto: true
       metric: aic
       seasonal: false
       order: [0, 1, 2]
       modo: retornos
-      max_p: 2
-      max_q: 2
+      max_p: 5
+      max_q: 5
       max_P: 2
       max_Q: 2
       max_d: 2
       max_D: 1
       enforce_stationarity: false
       enforce_invertibility: false
-      
     normal: {}
     backtest:
-      engine: model
+      engine: classic_auto
 
   - name: RW
     enabled: true
@@ -83,7 +69,7 @@ modelos:
     horizonte: 5
     params:
       frequency_hint: D1
-      changepoint_prior_scale: 0.5
+      changepoint_prior_scale: 0.3
       seasonality_mode: multiplicative
     normal: {}
     backtest:
@@ -93,7 +79,7 @@ modelos:
         yearly_seasonality: false
         weekly_seasonality: true
         daily_seasonality: true
-        interval_width: 0.9
+        interval_width: 0.8
 
   - name: LSTM
     enabled: true
@@ -103,7 +89,7 @@ modelos:
       window: 64
       units: 64
       dropout: 0.2
-      epochs: 40
+      epochs: 60
       batch_size: 32
       lr: 0.001
       loss: mse
@@ -116,43 +102,52 @@ modelos:
     backtest:
       engine: model
       lstm:
-        horizon: 5
+        horizon: 1
 
 # ---- Backtest (parámetros globales) ----
 bt:
   initial_train: 800
-  step: 50
+  step: 25
   horizon: 1
-  target: returns            # returns | price
+  target: returns
   pip_size: 0.0001
-  threshold_mode: fixed      # fixed | ATR | GARCH (si tu exportador lo soporta)
-  threshold_pips: 12.0
+
+  # --- UMBRAL ADAPTATIVO ---
+  threshold_mode: atr            # <— ACTIVADO ATR
+  threshold_pips: 12.0           # (se ignora cuando mode=atr)
   atr_window: 14
-  atr_k: 0.6
+  atr_k: 0.8                     # k inicial
   garch_k: 0.6
-  min_threshold_pips: 10.0
-  log_threshold_used: false
+  min_threshold_pips: 8.0
+
+  # --- Log del umbral por trade (para verificar que es dinámico) ---
+  log_threshold_used: true       # <— ACTIVADO
+
+  # --- Auto-búsqueda por refit (perfil conservador al inicio) ---
   auto:
-    scan: {}
-    rescan_each_refit: false
+    scan:
+      atr_k: [0.6, 0.8]          # <— coherente con ATR; evita thresholds fijos
+    rescan_each_refit: false     # primero estable; luego si mejora, poner true
     rescan_every_refits: 999999
+
   exog:
     enable: false
     lags: [1, 2, 3]
+
   outxlsx: "outputs/evaluacion.xlsx"
   outdir_plots: "outputs/backtest_plots"
 
 # ---- Logging opcional (telemetría) ----
 logging:
   enable: true
-  level: INFO               # DEBUG | INFO | WARNING | ERROR
+  level: INFO
   show_console: true
   to_file: true
   file_path: "logs/marki.log"
   profile:
     enable: true
     every_n_steps: 10
-    with_memory: false      # requiere psutil
+    with_memory: false
 
 defaults:
   normal: {}
@@ -160,7 +155,6 @@ defaults:
 
 # ============================================
 # SANITY CHECKS (validación de configuración)
-# -> Tu código puede leer este bloque y validar antes de correr.
 # ============================================
 sanity_checks:
   enforce: true

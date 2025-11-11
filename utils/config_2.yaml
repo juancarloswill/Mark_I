@@ -1,0 +1,64 @@
+simbolo: EURUSD
+timeframe: D1
+cantidad_datos: 3000
+eda:
+  frecuencia_resampleo: D
+split:
+  mode: last_n
+  n: 500
+mt5:
+  login: 68238343
+  password: Colombia123*
+  server: RoboForex-Pro
+  path: C:\Program Files\RoboForex - MetaTrader 5\terminal64.exe
+bt:
+  engine: classic_auto
+  initial_train: 1500
+  step: 5
+  horizon: 1
+  target: returns
+  pip_size: 0.0001
+  threshold_mode: garch
+  threshold_pips:
+  - 10
+  - 12
+  - 15
+  atr_window: 14
+  atr_k:
+  - 0.5
+  - 0.6
+  - 0.7
+  garch_k:
+  - 0.5
+  - 0.6
+  - 0.7
+  min_threshold_pips:
+  - 8
+  - 10
+  - 12
+  log_threshold_used: false
+  auto:
+    scan:
+      max_p: 2
+      max_q: 2
+      max_P: 1
+      max_Q: 1
+      s_candidates:
+      - 5
+      - 7
+    rescan_each_refit: false
+    rescan_every_refits: 25
+  optimize:
+    enabled: true
+    objective: ProfitFactor
+    maximize: true
+modelo:
+  nombre: ARIMA
+  params:
+    auto: true
+modelos:
+- name: ARIMA
+  params:
+    auto: true
+tuning:
+  log_dir: outputs/tuning
